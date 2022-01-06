@@ -127,7 +127,7 @@ function DoExperiment(totalAmount, peopleAmount, canvasW, canvasH, bottomPercent
       ctx.fillText(hintText, canvasW - 80, 10)
 
       ctx.fillStyle = '#E6A23C'
-      ctx.fillText('—— 公差',canvasW - 250, 10)
+      ctx.fillText('—— 方差', canvasW - 250, 10)
       ctx.fillStyle = '#909399'
       ctx.fillText('—— 均值', canvasW - 290, 10)
 
@@ -238,22 +238,23 @@ if (typeof window !== 'object') {
     const algorithmText = RedPack.toString().split('\n').map(codeLine => {
       let html = codeLine.replace(/\s\s/g, '<span class="empty_block"></span>')
         .replace(/AmplifyFactor(\s?=\s?\d+\.?\d*)?/g, '<code style="color:#FFFFCC;font-weight:bold;">AmplifyFactor</code>')
-
         .replace(/(\/\*\*.*\*\/)/g, '<code style="color:#669933">$1</code>')
 
-        ;['totalMoney', 'peopleAmount', 'pv', 'cv', 'idx', 'arr','thisTurn'].forEach(token => {
+        ;['totalMoney', 'peopleAmount', 'pv', 'cv', 'idx', 'arr', 'thisTurn'].forEach(token => {
           html = html.replace(new RegExp(token, 'g'), `<code style="color:#CCCCFF">${token}</code>`)
         })
 
-        ;['fill', 'reduce', 'push', 'toFixed','random', 'max', 'min'].forEach(token => {
+        ;['fill', 'reduce', 'push', 'toFixed', 'random', 'max', 'min'].forEach(token => {
           html = html.replace(new RegExp(token, 'g'), `<code style="color:#FFFFCC">${token}</code>`)
         })
+
         ;['Array', 'Math', 'new'].forEach(token => {
           html = html.replace(new RegExp(token, 'g'), `<code style="color:#CCFFFF">${token}</code>`)
         })
 
-      return `<code>${html
-        }</code>`
+      return html.includes('AmplifyFactor') && html.includes('*') ?
+        `<code style="background-color:#404244">${html}</code>` :
+        `<code>${html}</code>`
     })
     console.log(algorithmText)
     const algorithmNode = document.createElement('div')
