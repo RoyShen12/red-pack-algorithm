@@ -1,3 +1,33 @@
+const cancelToken = {
+  __cancelIdleCallback: new Map(),
+  __clearTimeout: new Map(),
+  __clearInterval: new Map(),
+  __cancelAnimationFrame: new Map(),
+  cancel() {
+    Object.keys(this)
+      .filter(key => key.startsWith('__'))
+      .forEach(token => {
+        /** @type {Map<string, Array<number>>} */
+        const tokenMap = this[token]
+        if (tokenMap.size > 0) {
+          tokenMap.forEach(vArr => {
+            vArr.forEach(v => window[token.replace('__', '')].call(null, v))
+          })
+        }
+
+        this[token] = new Map()
+      })
+  },
+}
+
+const randomStr = bits => {
+  let ret = ''
+  for (let index = 0; index < bits; index++) {
+    ret += (((Math.random() * 16) | 0) & 0xf).toString(16)
+  }
+  return ret
+}
+
 const AvgNext = (lastAvg, thisVal, n) => lastAvg + (thisVal - lastAvg) / n
 const VarNext = (lastAvg, lastVar, thisVal, n) =>
   ((n - 1) / Math.pow(n, 2)) * Math.pow(thisVal - lastAvg, 2) + ((n - 1) / n) * lastVar
@@ -22,9 +52,9 @@ const RedPack = (totalMoney, peopleAmount, AmplifyFactor = 3) =>
         idx === arr.length - 1
           ? +(totalMoney - pv[0]).toFixed(2)
           : +Math.max(
-            0.01,
-            (Math.random() /** [0, 1)] */ * AmplifyFactor * (totalMoney - pv[0])) / (arr.length - idx)
-          ).toFixed(2)
+              0.01,
+              (Math.random() /** [0, 1)] */ * AmplifyFactor * (totalMoney - pv[0])) / (arr.length - idx)
+            ).toFixed(2)
 
       if (thisTurn <= 0 && idx === arr.length - 1) {
         const op = pv[1][pv[1].length - 1]
@@ -53,6 +83,8 @@ function RedPackDebug(res) {
 }
 
 function DoExperiment(totalAmount, peopleAmount, canvasW, canvasH, bottomPercent, AmplifyFactor) {
+  const thisId = randomStr(16)
+
   const dpi = window.devicePixelRatio
 
   const canvas = document.createElement('canvas')
@@ -123,8 +155,8 @@ function DoExperiment(totalAmount, peopleAmount, canvasW, canvasH, bottomPercent
 
     if (!onceDraw) {
       ctx.fillStyle = '#030303'
-      const hintText = `money: ${totalAmount}  people: ${peopleAmount}  AmplifyFactor: ${AmplifyFactor}`
-      ctx.fillText(hintText, canvasW - 80, 10)
+      const hintText = `money: ${totalAmount}  people: ${peopleAmount}  AmplifyFactor: ${AmplifyFactor.toFixed(4)}`
+      ctx.fillText(hintText, canvasW - 90, 10)
 
       ctx.fillStyle = '#E6A23C'
       ctx.fillText('—— 方差', canvasW - 250, 10)
@@ -220,9 +252,15 @@ function DoExperiment(totalAmount, peopleAmount, canvasW, canvasH, bottomPercent
 
     /**************************************************** AnimControl ****************************************************/
 
-    // if (ExpTime < 1000) setTimeout(redPackAnim, 0)
-    if (ExpTime < 100000) requestIdleCallback(redPackAnim)
-    // requestAnimationFrame(redPackAnim)
+    if (ExpTime < 100000) {
+      const hdl = requestIdleCallback(redPackAnim)
+      cancelToken.__cancelIdleCallback.has(thisId) || cancelToken.__cancelIdleCallback.set(thisId, [])
+      cancelToken.__cancelIdleCallback.get(thisId).push(hdl)
+
+      // const hdl = setTimeout(redPackAnim, 0)
+      // cancelToken.__cancelAnimationFrame.has(thisId) || cancelToken.__cancelAnimationFrame.set(thisId, [])
+      // cancelToken.__cancelAnimationFrame.get(thisId).push(hdl)
+    }
   }
 
   redPackAnim()
@@ -234,29 +272,40 @@ if (typeof window !== 'object') {
   RedPackDebug(RedPack(177, 41))
 } else {
   window.onload = function () {
-    console.log(RedPack.toString().split('\n'))
-    const algorithmText = RedPack.toString().split('\n').map(codeLine => {
-      let html = codeLine.replace(/\s\s/g, '<span class="empty_block"></span>')
-        .replace(/AmplifyFactor(\s?=\s?\d+\.?\d*)?/g, '<code style="color:#FFFFCC;font-weight:bold;">AmplifyFactor</code>')
-        .replace(/(\/\*\*.*\*\/)/g, '<code style="color:#669933">$1</code>')
+    // console.log(RedPack.toString().split('\n'))
+    const run = () =>
+      range(runtimeValues.runRangeFrom, runtimeValues.runRangeTo, runtimeValues.runStep).forEach(amp =>
+        DoExperiment(runtimeValues.money, runtimeValues.people, 500, 500, 0.25, amp)
+      )
+
+    const algorithmText = RedPack.toString()
+      .split('\n')
+      .map(codeLine => {
+        let html = codeLine
+          .replace(/\s\s/g, '<span class="empty_block"></span>')
+          .replace(
+            /AmplifyFactor(\s?=\s?\d+\.?\d*)?/g,
+            '<code style="color:#FFFFCC;font-weight:bold;">AmplifyFactor</code>'
+          )
+          .replace(/(\/\*\*.*\*\/)/g, '<code style="color:#669933">$1</code>')
 
         ;['totalMoney', 'peopleAmount', 'pv', 'cv', 'idx', 'arr', 'thisTurn'].forEach(token => {
           html = html.replace(new RegExp(token, 'g'), `<code style="color:#CCCCFF">${token}</code>`)
         })
-
         ;['fill', 'reduce', 'push', 'toFixed', 'random', 'max', 'min'].forEach(token => {
           html = html.replace(new RegExp(token, 'g'), `<code style="color:#FFFFCC">${token}</code>`)
         })
-
         ;['Array', 'Math', 'new'].forEach(token => {
           html = html.replace(new RegExp(token, 'g'), `<code style="color:#CCFFFF">${token}</code>`)
         })
 
-      return html.includes('AmplifyFactor') && html.includes('*') ?
-        `<code style="background-color:#404244">${html}</code>` :
-        `<code>${html}</code>`
-    })
+        return html.includes('AmplifyFactor') && html.includes('*')
+          ? `<code style="background-color:#404244">${html}</code>`
+          : `<code>${html}</code>`
+      })
+
     console.log(algorithmText)
+
     const algorithmNode = document.createElement('div')
     algorithmNode.innerHTML = algorithmText.join('<br>')
     algorithmNode.style.padding = '20px 22px'
@@ -265,13 +314,101 @@ if (typeof window !== 'object') {
     algorithmNode.style.marginTop = '16px'
     algorithmNode.style.color = '#0099CC'
 
-    document.body.appendChild(algorithmNode)
+    const controlNode = document.createElement('div')
+    controlNode.style.display = 'flex'
+    controlNode.style.flexDirection = 'row'
+    controlNode.style.alignItems = 'center'
+    controlNode.style.justifyContent = 'flex-start'
+    controlNode.style.flexWrap = 'wrap'
+    controlNode.style.width = '100%'
+    controlNode.style.marginBottom = '2px'
+    controlNode.style.order = '-1'
 
-    range(1.9, 2.25, 0.01).forEach(amp => DoExperiment(200, 21, 500, 500, 0.25, +amp.toFixed(2)))
-    // range(1.9, 2.25, 0.01).forEach(amp => DoExperiment(1000, 33, 300, 500, 0.42, +amp.toFixed(2)))
-    // DoExperiment(200, 41, 500, 800, 3)
-    // DoExperiment(200, 41, 500, 800, 2.75)
-    // DoExperiment(200, 41, 500, 800, 2.5)
-    // DoExperiment(200, 41, 500, 800, 2)
+    const stop_button = document.createElement('div')
+    stop_button.style.padding = '4px 16px'
+    stop_button.style.margin = '10px'
+    stop_button.style.border = '1px solid rgba(32, 32, 32, 0.32)'
+    stop_button.style.borderRadius = '5px'
+    stop_button.style.userSelect = 'none'
+    stop_button.textContent = 'Stop'
+    stop_button.onclick = () => {
+      cancelToken.cancel()
+    }
+
+    const start_button = stop_button.cloneNode()
+    start_button.textContent = 'Start'
+    start_button.onclick = () => {
+      cancelToken.cancel()
+      Array.from(document.getElementsByTagName('canvas')).forEach(cvs => document.body.removeChild(cvs))
+
+      run()
+    }
+
+    // <input id="dot_rang" style="margin: 0 0 0 10px;width:60px;"
+    // type="range" min="0.000" max="0.100" step="0.0001" value="0.0001"
+    // onchange="setGlobalDifferentialOfTime(+this.value)">
+    let runtimeValues = {
+      people: 21,
+      money: 200,
+      runRangeFrom: 1.9,
+      runRangeTo: 2.25,
+      runStep: 0.01,
+    }
+
+    /**
+     * @param {number} initValue
+     * @param {number} slowPlus
+     * @param {number} quickPlus
+     */
+    const makeNumberTuneModule = (controlKey, disc, slowPlus, quickPlus) => {
+      const node = document.createElement('div')
+      node.style.margin = '2px 12px'
+      node.style.padding = '0 8px'
+      node.style.display = 'flex'
+      node.style.alignItems = 'center'
+
+      const hint = document.createElement('span')
+      hint.style.margin = '0 8px'
+      hint.style.flexGrow = '1'
+      const refreshHint = () =>
+        (hint.textContent = `${disc}: ${runtimeValues[controlKey].toFixed(5).replace(/0+$/, '').replace(/\.$/, '')}`)
+      refreshHint()
+
+      const btnArr = [-quickPlus, -slowPlus, +slowPlus, +quickPlus].map(c => {
+        /** @type {HTMLDivElement} */
+        const btn = stop_button.cloneNode()
+        btn.style.fontSize = '10px'
+        btn.style.padding = '2px 2px'
+        btn.style.margin = '0 2px'
+        btn.textContent = (c > 0 ? '+ ' : '- ') + String(Math.abs(c))
+        btn.onclick = () => {
+          runtimeValues[controlKey] = runtimeValues[controlKey] + c
+          refreshHint()
+        }
+        return btn
+      })
+
+      node.appendChild(btnArr[0])
+      node.appendChild(btnArr[1])
+      node.appendChild(hint)
+      node.appendChild(btnArr[2])
+      node.appendChild(btnArr[3])
+
+      return node
+    }
+
+    controlNode.appendChild(makeNumberTuneModule('money', 'Total Money', 50, 10))
+    controlNode.appendChild(makeNumberTuneModule('people', 'People', 5, 1))
+    controlNode.appendChild(makeNumberTuneModule('runRangeFrom', 'Amp From', 0.01, 0.1))
+    controlNode.appendChild(makeNumberTuneModule('runRangeTo', 'Amp To', 0.01, 0.1))
+    controlNode.appendChild(makeNumberTuneModule('runStep', 'Amp Change Step', 0.0001, 0.001))
+    controlNode.appendChild(start_button)
+    controlNode.appendChild(stop_button)
+
+    document.body.appendChild(algorithmNode)
+    document.body.appendChild(controlNode)
+
+    // start experiment
+    run()
   }
 }
